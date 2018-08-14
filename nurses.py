@@ -20,6 +20,7 @@ class NursesPartialSolutionPrinter(cp_model.CpSolverSolutionCallback):
     self.__solution_count += 1
     if self.__solution_count in self.__solutions:
       result = []
+      pivot = [[0 for x in range(self.__num_days)] for y in range(self.__num_shifts)]
       dict = {'day': None, 'nurse': None, 'shift': None}
       text_file = open("Output.txt", "a")
       print('Solution #%i' % self.__solution_count)
@@ -27,7 +28,6 @@ class NursesPartialSolutionPrinter(cp_model.CpSolverSolutionCallback):
       text_file.writelines('Solution #%i\n' % self.__solution_count)
       for d in range(self.__num_days):
         print('Day #%i' % d)
-        # text_file.writelines('Day #%i\n' % d)
         for n in range(self.__num_nurses):
           for s in range(self.__num_shifts):
             if self.Value(self.__shifts[(n, d, s)]):
@@ -36,14 +36,15 @@ class NursesPartialSolutionPrinter(cp_model.CpSolverSolutionCallback):
               dict['nurse'] = n
               dict['shift'] = s
               result.append(dict.copy())
-              
-              # text_file.writelines(dict)
-              # text_file.writelines('  Nurse #%i is working shift #%i\n' % (n, s))
-      # text_file.writelines(result)
+
       for obj in result:
         # print('%i, %i, %i' % (obj['day'], obj['nurse'], obj['shift']))
-        text_file.writelines('%i, %i, %i\n' % (obj['day'], obj['nurse'], obj['shift']))
-      text_file.writelines('\n')
+        pivot[obj['shift']][obj['day']] = obj['nurse']
+
+      for shift in pivot:
+        for day in shift:
+          text_file.writelines('%i, ' % day)
+        text_file.writelines('\n')
       text_file.close()
 
   def SolutionCount(self):
@@ -58,7 +59,7 @@ def main():
   
   # Data.
   num_nurses = 10
-  num_shifts = 5  # Nurse assigned to shift 0 means not working that day.
+  num_shifts = 10  # Nurse assigned to shift 0 means not working that day.
   num_days = 7
   all_nurses = range(num_nurses)
   all_shifts = range(num_shifts)
@@ -108,7 +109,11 @@ def main():
   # That is each nurse works shift 0 at most 2 times.
   # Adds the constraints lb <= sum(variables) <= ub. 1 <= X <= 2
   for n in all_nurses:
-    model.AddSumConstraint([shifts[(n, d, 0)] for d in all_days], 0, 6)
+    model.AddSumConstraint([shifts[(n, d, 0)] for d in all_days], 0, 2)
+    
+    # model.AddSumConstraint([shifts[(0, 0, 0)] for d in all_days], 1, 2)
+    # model.AddSumConstraint([shifts[(0, 1, 0)] for d in all_days], 1, 2)
+    # model.AddSumConstraint([shifts[(0, 2, 0)] for d in all_days], 1, 2)
 
     # So basically a nurse gets either shifts[(0, 0, 0)] or shifts[(0, 1, 0)] off
     # that means only two of these arrays can exist in that nurses's "bucket"
@@ -127,20 +132,24 @@ def main():
   for s in all_working_shifts:
     model.Add(sum(works_shift[(n, s)] for n in all_nurses) <= 2)
 
+  # No shift has 1 nurse working that entire week
+  for s in all_working_shifts:
+    model.Add(sum(works_shift[(n, s)] for n in all_nurses) > 1)
+
   # # If a nurse works shifts 2 or 3 on, she must also work that shift the
   # # previous day or the following day.
   # # This means that on a given day and shift, either she does not work that
   # # shift on that day, or she works that shift on the day before, or the day
   # # after.
-  # for n in all_nurses:
-  #   for s in [2, 3]:
-  #     for d in all_days:
-  #       yesterday = (d - 1) % num_days
-  #       tomorrow = (d + 1) % num_days
-  #       model.AddBoolOr([
-  #           shifts[(n, yesterday, s)], shifts[(n, d, s)].Not(),
-  #           shifts[(n, tomorrow, s)]
-  #       ])
+  for n in all_nurses:
+    for s in [2, 3]:
+      for d in all_days:
+        yesterday = (d - 1) % num_days
+        tomorrow = (d + 1) % num_days
+        model.AddBoolOr([
+            shifts[(n, yesterday, s)], shifts[(n, d, s)].Not(),
+            shifts[(n, tomorrow, s)]
+        ])
 
   # Creates the solver and solve.
   solver = cp_model.CpSolver()
