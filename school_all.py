@@ -1,14 +1,11 @@
 """I'm trying to solve a school scheduling problem using the SAT solver. Since is similar to the nurse scheduling problem (https://github.com/google/or-tools/blob/master/examples/python/nurses_sat.py)  I used a similar approach, but I'm having some trouble with a constraint, I would like to ask you for your guidance since i've been stuck for a while now.
-
 In this problem I have courses, subjects, teachers and timeslots. , A course is made of a level (first grade, second grade, etc) and a section (A, B), for example 1°A, 1°B, 2°A, ...., subjects are Math, English, History, etc, We have t Teachers, each one with some skills that allow them to teach some subjects and the timeslots are when the subjects are taught. Also, every level contains a curriculum, that is the quantity of timeslots per subject required, for example all the first grades need to have 5 timeslots of english, 3 of math, and so on.
-
 So we have some restrictions:
 + A teacher cannot teach more than 1 class simultaneosly
 + A teacher can only teach subjects of his/her set of skills (specialties)
 + Each course must meet the quantity of classes speicfied in the curriculum
 + Each teacher has a maximum number of working hours (here hours == timeslots)
 - For a given course and subject, the teacher must be the same for all of them (ex: 1°A has only one Math teacher)
-
 I modeled the problem as a big boolean matrix: assign[c, s, t, ts] = 1 if teacher t is assigned to course c and subject s in timeslot ts, and I've been able to add all the constraints but the last one."""
 
 from ortools.sat.python import cp_model
@@ -151,7 +148,15 @@ class SchoolSchedulingSatSolver(object):
 class SchoolSchedulingSatSolutionPrinter(cp_model.CpSolverSolutionCallback):
 
   def __init__(self, assignment, working_days, periods, timeslots, teachers, subjects, levels, sections, num_courses, sols):
-    
+
+    self.__working_days = working_days
+    self.__periods = periods
+    self.__slots = timeslots
+    self.__teachers = teachers
+    self.__subjects = subjects
+    self.__levels = levels
+    self.__sections = sections
+
     self.__assignment = assignment
     self.__num_days = len(working_days)
     self.__num_periods = len(periods)
@@ -175,7 +180,10 @@ class SchoolSchedulingSatSolutionPrinter(cp_model.CpSolverSolutionCallback):
           for t in range(self.__num_teachers):
             for ts in range(self.__num_slots):
               if self.Value(self.__assignment[(c, s, t, ts)]):
-                print(' Course #%i | Subject #%i | Teacher #%i | TimeSlot #%i' % (c, s, t, ts))
+                subject_name = self.__subjects[s]
+                teacher_name = self.__teachers[t]
+                slot_name = self.__slots[ts]
+                print(' Course #%i | Subject #%s | Teacher #%s | TimeSlot #%s' % (c, subject_name, teacher_name, slot_name))
       print('\n')
 
   def SolutionCount(self):
@@ -237,6 +245,3 @@ def main():
 
 if __name__ == '__main__':
   main()
-
-
-
