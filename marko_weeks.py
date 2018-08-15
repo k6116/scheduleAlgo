@@ -1,10 +1,10 @@
 from ortools.sat.python import cp_model
 
 
-class SchoolSchedulingProblem(object):
+class HospitalSchedulingProblem(object):
 
   def __init__(self, areas, doctors, curriculum, specialties, weeks, working_days,
-               schedules, versions, doctor_work_hours):
+               schedules, versions, doctor_work_days):
     self.areas = areas
     self.doctors = doctors
     self.curriculum = curriculum
@@ -13,10 +13,10 @@ class SchoolSchedulingProblem(object):
     self.working_days = working_days
     self.schedules = schedules
     self.versions = versions
-    self.doctor_work_hours = doctor_work_hours
+    self.doctor_work_days = doctor_work_days
 
 
-class SchoolSchedulingSatSolver(object):
+class HospitalSchedulingSatSolver(object):
 
   def __init__(self, problem):
     # Problem
@@ -37,7 +37,6 @@ class SchoolSchedulingSatSolver(object):
         for y in problem.versions
     ]
     self.num_schedule_versions = self.num_schedules * self.num_versions
-    print(self.schedule_versions)
 
     all_schedule_versions = range(self.num_schedule_versions)
     all_doctors = range(self.num_doctors)
@@ -49,6 +48,7 @@ class SchoolSchedulingSatSolver(object):
 
     self.model = cp_model.CpModel()
 
+    # build all the possible permutations including the specialties
     self.assignment = {}
     for sv in all_schedule_versions:
       for w in all_weeks:
@@ -57,7 +57,7 @@ class SchoolSchedulingSatSolver(object):
             for day in all_days:
               if d in self.problem.specialties[a]:
                 name = 'C:{%i} W:{%i} S:{%i} T:{%i} Slot:{%i}' % (sv, w, a, d, day)
-                print(name)
+                # print(name)
                 self.assignment[sv, w, a, d, day] = self.model.NewBoolVar(name)
               else:
                 name = 'NO DISP C:{%i} W:{%i} S:{%i} T:{%i} Slot:{%i}' % (sv, w, a, d, day)
@@ -66,7 +66,8 @@ class SchoolSchedulingSatSolver(object):
 
     # Constraints
 
-    # Each course must have the quantity of classes specified in the curriculum
+    # Each schedule/version must have the quantity of areas specified in the curriculum
+    # 8/15: All areas are required 5 days of the week
     for sch in all_schedules:
       for ver in all_versions:
         sch_ver = sch * self.num_versions + ver
@@ -79,10 +80,10 @@ class SchoolSchedulingSatSolver(object):
                     for day in all_days
                     for doctor in all_doctors) == required_days)
 
-    # Doctor can do at most one class at a time
+    # Doctor can work at only one area at a time (per day)
     for doctor in all_doctors:
       for week in all_weeks:
-        for days in all_days:
+        for day in all_days:
           self.model.Add(
               sum([
                   self.assignment[sv, week, a, doctor, day]
@@ -101,13 +102,13 @@ class SchoolSchedulingSatSolver(object):
                   for d in all_doctors
               ]) == 1)
 
-    # Maximum work hours for each doctor
+    # Maximum work days for each doctor
     for week in all_weeks:
       for doctor in all_doctors:
         self.model.Add(
             sum([self.assignment[sv, week, a, doctor, day] for sv in all_schedule_versions
                 for a in all_areas for day in all_days
-            ]) <= self.problem.doctor_work_hours[doctor])
+            ]) <= self.problem.doctor_work_days[doctor])
     
 
     # Doctor makes all the classes of a area's course
@@ -138,7 +139,7 @@ class SchoolSchedulingSatSolver(object):
     a_few_solutions = [1, 2, 100, 1000, 5000, 50000, 100000, 2000000]
 
     solver = cp_model.CpSolver()
-    solution_printer = SchoolSchedulingSatSolutionPrinter(self.assignment, self.problem.weeks, self.problem.working_days,
+    solution_printer = HospitalSchedulingSatSolutionPrinter(self.assignment, self.problem.weeks, self.problem.working_days,
       self.problem.doctors, self.problem.areas, self.problem.schedules, self.problem.versions, self.num_schedule_versions, a_few_solutions)
     status = solver.SearchForAllSolutions(self.model, solution_printer)
     print('- Statistics')
@@ -151,7 +152,7 @@ class SchoolSchedulingSatSolver(object):
     pass
 
 
-class SchoolSchedulingSatSolutionPrinter(cp_model.CpSolverSolutionCallback):
+class HospitalSchedulingSatSolutionPrinter(cp_model.CpSolverSolutionCallback):
 
   def __init__(self, assignment, weeks, working_days, doctors, areas, schedules, versions, num_schedule_versions, sols):
 
@@ -200,15 +201,15 @@ def main():
   # DATA
   areas = ['RMC Body/ED', 'RMC Mamm/Breast', 'RMC US/PET/ED', 'RMC Dx4', 'RMC IR', 'SJH Dx/IR',
               'SJH PCAC Dx/Mammo', 'SFH Mamm/Neuro', 'SFH ER/Flouro/Nuclear', 'SFH IR', 'SFH Body/Chest']
-  schedules = ['1']
-  versions = ['A']
+  schedules = ['1'] # this is just here in case we need alternate specifications
+  versions = ['A'] # this is just here in case we need alternate specifications
   doctors = ['Lum', 'Iwanik', 'Granato',
               'Clemins', 'Radich', 'Bahu',
               'Rapoport M', 'Rapoport L', 'Brack',
               'Reich', 'Simon', 'Skezas',
               'Calandra', 'Cronin', 'Major',
               'Kim', 'Hamblin']
-  doctors_work_hours = [3, 3, 3,
+  doctors_work_days = [3, 3, 3,
                         4, 4, 4,
                         4, 4, 4,
                         4, 5, 5,
@@ -219,7 +220,7 @@ def main():
 
   # This curriculum needs to match up with the right amount of specialties
   # For example, this won't work:
-  #  Having one person specialize solo in two departments. If we alott 5 hours to each employee, this person cant be at two depts at once
+  #  Having one person specialize solo in two departments. If we alott 5 days to each employee, this person cant be at two depts at once
   curriculum = {
       ('1', 'RMC Body/ED'): 5,
       ('1', 'RMC Mamm/Breast'): 5,
@@ -234,7 +235,7 @@ def main():
       ('1', 'SFH Body/Chest'): 5
   }
 
-  # Area -> List of doctors who can teach it
+  # Area -> List of doctors who can work in it
   specialties_idx_inverse = [
       [0, 1, 2, 3],      # RMC Body/ED
       [2, 3, 4],      # RMC Mamm/Breast
@@ -251,10 +252,10 @@ def main():
   
 
 
-  problem = SchoolSchedulingProblem(
+  problem = HospitalSchedulingProblem(
       areas, doctors, curriculum, specialties_idx_inverse, weeks, working_days,
-      schedules, versions, doctors_work_hours)
-  solver = SchoolSchedulingSatSolver(problem)
+      schedules, versions, doctors_work_days)
+  solver = HospitalSchedulingSatSolver(problem)
   solver.solve()
   solver.print_status()
 
